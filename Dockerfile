@@ -8,3 +8,7 @@ COPY . .
 
 RUN pip install --upgrade pip \
     && pip install --no-cache-dir -Ur requirements.txt
+
+
+
+CMD python ./telegram-bot.py

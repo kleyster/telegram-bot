@@ -1,2 +1,4 @@
 redis
 pyTelegramBotAPI
+flask
+python-dotenv

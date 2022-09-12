@@ -5,6 +5,8 @@ import config
 import os
 import pathlib
 import requests
+from flask import Flask, request
+import logging
 
 
 BASE_DIR = pathlib.Path(__file__).parent.resolve()
@@ -12,11 +14,9 @@ GROUPS_FILE = os.path.join(BASE_DIR, "groups.json")
 
 API_TOKEN = config.API_TOKEN
 CHECK = requests.get(f"https://api.telegram.org/bot{config.API_TOKEN}/getMe")
-print(CHECK)
 
 bot = telebot.TeleBot(API_TOKEN)
 BOT = bot.get_me()
-
 
 def send_to_groups(chat_id):
     address = config.CLIENT.get(f"address-{chat_id}")
@@ -30,18 +30,25 @@ def send_to_groups(chat_id):
     address = json.loads(address)
     try:
         with open(GROUPS_FILE, "r") as file:
-            for cid in json.loads(file.read())['groups']:
-                bot.send_location(cid, address['latitude'], address['longitude'])
-                bot.send_photo(cid, photo)
-                bot.send_message(cid, comment)
-        print("success")
+            groups = json.loads(file.read())
+            if groups:
+                for cid in groups['groups']:
+                    bot.send_location(cid, address['latitude'], address['longitude'])
+                    bot.send_photo(cid, photo)
+                    bot.send_message(cid, comment)
+        bot.send_message(chat_id,"Қабылданды",reply_markup=general_markup())
     except Exception as e:
-        bot.send_message(chat_id, "Қате, қайтадаң қайталап көріңіз", reply_markup=general_markup())
+        bot.send_message(chat_id, "Қате. Қайтадан жіберіп көріңіз.", reply_markup=general_markup())
 
+
+def stop_markup():
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    markup.add(types.KeyboardButton('Тоқтату'))
+    return markup
 
 def general_markup():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    keys = ['Ақпарат', 'Жалоба']
+    keys = ['Ақпарат', 'Арыз']
     for key in keys:
         markup.add(types.KeyboardButton(key))
     return markup
@@ -52,11 +59,20 @@ def handle_photo(message):
         bot.send_message(message.chat.id, "Суретті жіберіңіз")
         bot.register_next_step_handler(message, handle_photo)
     config.CLIENT.set(f"photo-{message.chat.id}", message.photo[-1].file_id)
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add(types.KeyboardButton("Мекен-жайды жіберу", request_location=True), types.KeyboardButton("Тоқтату"))
-    bot.send_message(message.chat.id, "Мекен-жайды жіберу үшін сәйкес батырманы басыңыз", reply_markup=markup)
-    bot.register_next_step_handler(message, handle_address)
+    markup = stop_markup()
+    bot.send_message(message.chat.id, "Нысан атауы", reply_markup=markup)
+    bot.register_next_step_handler(message, handle_object_name)
 
+
+def handle_object_name(message):
+    if message.text == "Тоқтату":
+        bot.send_message(message.chat.id, "Батырманы басыңыз", reply_markup=general_markup())
+    else:
+        config.CLIENT.set(f"object-name-{message.chat.id}", message.text)
+        markup = stop_markup()
+        markup.add(types.KeyboardButton("Мекен-жайды жіберу", request_location=True))
+        bot.send_message(message.chat.id, "Мекен-жайды жіберу үшін сәйкес батырманы басыңыз", reply_markup=markup)
+        bot.register_next_step_handler(message, handle_address)
 
 def handle_address(message):
     if message.text == "Тоқтату":
@@ -73,7 +89,7 @@ def handle_address(message):
         })
         config.CLIENT.set(f"address-{message.chat.id}", location)
         markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-        markup.add(types.KeyboardButton("Тоқтату"))
+        markup.add(types.KeyboardButton("Тоқтату"),types.KeyboardButton("Комментариясыз жіберу"))
         bot.send_message(message.chat.id, "Комментария", reply_markup=markup)
         bot.register_next_step_handler(message, handle_comments)
 
@@ -82,6 +98,7 @@ def handle_comments(message):
     if message.text == "Тоқтату":
         bot.send_message(message.chat.id, "Батырманы басыңыз", reply_markup=general_markup())
     else:
+        msg = "Комментария жоқ" if message.text == "Комментариясыз жіберу" else message.text
         config.CLIENT.set(f"comment-{message.chat.id}", message.text)
         send_to_groups(message.chat.id)
 
@@ -131,9 +148,37 @@ def handle_text(message):
         with open(os.path.join(BASE_DIR,"info.txt"), "r") as file:
             text = file.read()
         bot.send_message(message.chat.id, text)
-    elif message.text == "Жалоба":
-        bot.send_message(message.chat.id, "Сурет жберіңіз")
+    elif message.text == "Арыз":
+        bot.send_message(message.chat.id, "Суретті жіберіңіз")
         bot.register_next_step_handler(message, handle_photo)
 
 
-bot.infinity_polling()
+if "HEROKU" in list(os.environ.keys()):
+    logger = telebot.logger
+    telebot.logger.setLevel(logging.DEBUG)
+
+    server = Flask(__name__)
+
+
+    @server.route("/bot/", methods=['POST'])
+    def getMessage():
+        r = request.get_data().decode("utf-8")
+        print(r)
+        bot.process_new_updates([telebot.types.Update.de_json(r)])
+        return "!", 200
+
+
+    @server.route("/")
+    def webhook():
+        return ''
+
+
+    bot.remove_webhook()
+    bot.set_webhook(
+        url=config.WEBHOOK_URL)
+    server.run(host="0.0.0.0", port=os.environ.get("PORT",8000), debug=True)
+
+else:
+    print("polling")
+    bot.remove_webhook()
+    bot.polling()
