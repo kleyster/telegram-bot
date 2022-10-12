@@ -166,7 +166,6 @@ if "HEROKU" in list(os.environ.keys()):
     @server.route("/bot/", methods=['POST'])
     def getMessage():
         r = request.get_data().decode("utf-8")
-        print(r)
         bot.process_new_updates([telebot.types.Update.de_json(r)])
         return "!", 200
 
