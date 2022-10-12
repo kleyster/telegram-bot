@@ -18,6 +18,7 @@ CHECK = requests.get(f"https://api.telegram.org/bot{config.API_TOKEN}/getMe")
 bot = telebot.TeleBot(API_TOKEN)
 BOT = bot.get_me()
 
+
 def send_to_groups(chat_id):
     address = config.CLIENT.get(f"address-{chat_id}")
     photo = config.CLIENT.get(f"photo-{chat_id}")
@@ -36,7 +37,7 @@ def send_to_groups(chat_id):
                     bot.send_location(cid, address['latitude'], address['longitude'])
                     bot.send_photo(cid, photo)
                     bot.send_message(cid, comment)
-        bot.send_message(chat_id,"Қабылданды",reply_markup=general_markup())
+        bot.send_message(chat_id,"Қабылданды", reply_markup=general_markup())
     except Exception as e:
         bot.send_message(chat_id, "Қате. Қайтадан жіберіп көріңіз.", reply_markup=general_markup())
 
@@ -45,6 +46,7 @@ def stop_markup():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     markup.add(types.KeyboardButton('Тоқтату'))
     return markup
+
 
 def general_markup():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
@@ -73,6 +75,7 @@ def handle_object_name(message):
         markup.add(types.KeyboardButton("Мекен-жайды жіберу", request_location=True))
         bot.send_message(message.chat.id, "Мекен-жайды жіберу үшін сәйкес батырманы басыңыз", reply_markup=markup)
         bot.register_next_step_handler(message, handle_address)
+
 
 def handle_address(message):
     if message.text == "Тоқтату":
